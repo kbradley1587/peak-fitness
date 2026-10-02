@@ -389,7 +389,7 @@ function checkin(){
         <label class="f"><span>Steps</span><input class="in" type="number" inputmode="numeric" name="steps" min="0" step="100" value="${ex.steps??''}" placeholder="e.g. 8,200"></label>
         <label class="f"><span>Sleep</span><div class="row" style="flex-wrap:nowrap"><input class="in" type="number" inputmode="numeric" name="sleepH" min="0" max="16" value="${ex.sleep!=null?Math.floor(ex.sleep):''}" placeholder="hrs" aria-label="Sleep hours"><input class="in" type="number" inputmode="numeric" name="sleepM" min="0" max="59" value="${ex.sleep!=null?Math.round((ex.sleep%1)*60):''}" placeholder="min" aria-label="Sleep minutes"></div></label>
         <label class="f"><span>Water (cups)</span><input class="in" type="number" inputmode="numeric" name="water" min="0" max="30" value="${ex.water??''}" placeholder="8 hits the goal"></label>
-        <label class="f"><span>Mood today</span><select class="in" name="mood">${[1,2,3,4,5].map(n=>`<option value="${n}" ${(ex.mood||3)==n?'selected':''}>${['😩 Rough','😕 Meh','😐 Okay','🙂 Good','🔥 Great'][n-1]}</option>`).join('')}</select></label>
+        <label class="f"><span>Mood Today</span><select class="in" name="mood">${[1,2,3,4,5].map(n=>`<option value="${n}" ${(ex.mood||3)==n?'selected':''}>${['😩 Rough','😕 Meh','😐 Okay','🙂 Good','🔥 Great'][n-1]}</option>`).join('')}</select></label>
       </div>
       <div class="grid2">
         ${tog('workout','Peak Workout completed',`+${P.workout} pts`,ex.workout)}
