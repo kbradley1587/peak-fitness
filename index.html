@@ -204,7 +204,7 @@ textarea.in{min-height:70px;resize:vertical}
 const KEY='peakfit.v1';
 const DEFAULTS={
   coachPin:'1234',
-  points:{checkin:5,workout:20,otherWorkout:10,steps1:5,steps2:10,steps3:15,sleep:5,water:5,protein:5,mobility:5,streak:25,encourage:5},
+  points:{checkin:5,workout:20,otherWorkout:10,sunlight:5,steps1:5,steps2:10,steps3:15,sleep:5,water:5,protein:5,mobility:5,streak:25,encourage:5},
   thresholds:{steps1:7500,steps2:10000,steps3:12500,sleep:7,water:8},
   clients:[
     {id:'c1',name:'Kayla',pin:'1111'},{id:'c2',name:'Aaron',pin:'2222'},{id:'c3',name:'Pat',pin:'3333'},
@@ -226,6 +226,7 @@ let S=null;
 function load(){
   try{const raw=localStorage.getItem(KEY); if(raw){S=JSON.parse(raw);}}catch(e){S=null}
   if(S&&S.points&&S.points.otherWorkout==null){S.points.otherWorkout=10;S.checkins.forEach(c=>{if(c.otherWorkout==null)c.otherWorkout=false});save()}
+  if(S&&S.points&&S.points.sunlight==null){S.points.sunlight=5;S.checkins.forEach(c=>{if(c.sunlight==null)c.sunlight=false});save()}
   if(!S){S=JSON.parse(JSON.stringify(DEFAULTS)); S.challengeStart=iso(weekStart(new Date())); seed(); save();}
 }
 function save(){ try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){} }
@@ -259,7 +260,7 @@ function seed(){
         steps:Math.round((4000+rnd()*10000*p)/100)*100,
         workout, otherWorkout, workoutType:otherWorkout?types[Math.floor(rnd()*types.length)]:'',
         sleep:Math.round((5.5+rnd()*3)*2)/2, water:Math.round(4+rnd()*6),
-        protein:rnd()<p, mobility:rnd()<p*.7, encouraged:rnd()<p*.6,
+        protein:rnd()<p, mobility:rnd()<p*.7, sunlight:rnd()<p*.8, encouraged:rnd()<p*.6,
         mood:Math.ceil(rnd()*5), notes:''});
     });
   }
@@ -271,7 +272,7 @@ function dailyPoints(ci){
   const base=P.checkin;
   const steps=ci.steps>=T.steps3?P.steps3:ci.steps>=T.steps2?P.steps2:ci.steps>=T.steps1?P.steps1:0;
   const habits=(ci.workout?P.workout:0)+(ci.otherWorkout?P.otherWorkout:0)+(ci.sleep>=T.sleep?P.sleep:0)+(ci.water>=T.water?P.water:0)
-    +(ci.protein?P.protein:0)+(ci.mobility?P.mobility:0)+(ci.encouraged?P.encourage:0);
+    +(ci.protein?P.protein:0)+(ci.mobility?P.mobility:0)+(ci.sunlight?P.sunlight:0)+(ci.encouraged?P.encourage:0);
   return {base,steps,habits,total:base+steps+habits};
 }
 function streakOf(clientId){
@@ -395,6 +396,7 @@ function checkin(){
         ${tog('otherWorkout','Other workout completed',`cardio, yoga, other gym session… +${P.otherWorkout} pts`,ex.otherWorkout)}
         ${tog('protein','Hit protein goal',`+${P.protein} pts`,ex.protein)}
         ${tog('mobility','Mobility / stretching',`+${P.mobility} pts`,ex.mobility)}
+        ${tog('sunlight','Morning sunlight',`+${P.sunlight} pts`,ex.sunlight)}
         ${tog('encouraged','Encouraged a teammate',`+${P.encourage} pts`,ex.encouraged)}
       </div>
       <label class="f" id="wtWrap" style="${ex.otherWorkout?'':'display:none'}"><span>What kind of workout?</span><input class="in" name="workoutType" value="${esc(ex.workoutType||'')}" placeholder="Weight training, run, HIIT…"></label>
@@ -406,7 +408,7 @@ function checkin(){
 }
 function readForm(){
   const f=document.getElementById('ci'),fd=new FormData(f),t=k=>f.querySelector(`[data-t="${k}"]`).classList.contains('on');
-  return {steps:+fd.get('steps')||0,sleep:+(Math.max(0,+fd.get('sleepH')||0)+Math.min(59,Math.max(0,+fd.get('sleepM')||0))/60).toFixed(4),water:+fd.get('water')||0,mood:+fd.get('mood')||3,workout:t('workout'),otherWorkout:t('otherWorkout'),protein:t('protein'),mobility:t('mobility'),encouraged:t('encouraged'),workoutType:fd.get('workoutType')||'',notes:fd.get('notes')||''};
+  return {steps:+fd.get('steps')||0,sleep:+(Math.max(0,+fd.get('sleepH')||0)+Math.min(59,Math.max(0,+fd.get('sleepM')||0))/60).toFixed(4),water:+fd.get('water')||0,mood:+fd.get('mood')||3,workout:t('workout'),otherWorkout:t('otherWorkout'),protein:t('protein'),mobility:t('mobility'),sunlight:t('sunlight'),encouraged:t('encouraged'),workoutType:fd.get('workoutType')||'',notes:fd.get('notes')||''};
 }
 function updLive(){
   const l=document.getElementById('live');if(!l)return;
@@ -474,6 +476,7 @@ function coach(){
       <span>Water ${T.water}+ cups</span><input class="in" name="water" type="number" value="${P.water}">
       <span>Protein goal</span><input class="in" name="protein" type="number" value="${P.protein}">
       <span>Mobility</span><input class="in" name="mobility" type="number" value="${P.mobility}">
+      <span>Morning Sunlight</span><input class="in" name="sunlight" type="number" value="${P.sunlight}">
       <span>Encouraged someone</span><input class="in" name="encourage" type="number" value="${P.encourage}">
       <span>7-day streak bonus</span><input class="in" name="streak" type="number" value="${P.streak}">
       <span>Coach PIN</span><input class="in" name="coachPin" inputmode="numeric" pattern="\\d{4}" maxlength="4" value="${S.coachPin}">
