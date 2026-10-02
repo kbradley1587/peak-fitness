@@ -392,12 +392,12 @@ function checkin(){
         <label class="f"><span>Mood today</span><select class="in" name="mood">${[1,2,3,4,5].map(n=>`<option value="${n}" ${(ex.mood||3)==n?'selected':''}>${['😩 Rough','😕 Meh','😐 Okay','🙂 Good','🔥 Great'][n-1]}</option>`).join('')}</select></label>
       </div>
       <div class="grid2">
-        ${tog('workout','Peak workout completed',`+${P.workout} pts`,ex.workout)}
+        ${tog('workout','Peak Workout completed',`+${P.workout} pts`,ex.workout)}
         ${tog('otherWorkout','Other workout completed',`cardio, yoga, other gym session… +${P.otherWorkout} pts`,ex.otherWorkout)}
-        ${tog('protein','Hit protein goal',`+${P.protein} pts`,ex.protein)}
+        ${tog('protein','Hit Protein Goal',`+${P.protein} pts`,ex.protein)}
         ${tog('mobility','Mobility / stretching',`+${P.mobility} pts`,ex.mobility)}
-        ${tog('sunlight','Morning sunlight',`+${P.sunlight} pts`,ex.sunlight)}
-        ${tog('encouraged','Encouraged a teammate',`+${P.encourage} pts`,ex.encouraged)}
+        ${tog('sunlight','Morning Sunlight',`+${P.sunlight} pts`,ex.sunlight)}
+        ${tog('encouraged','Encouraged a Teammate',`+${P.encourage} pts`,ex.encouraged)}
       </div>
       <label class="f" id="wtWrap" style="${ex.otherWorkout?'':'display:none'}"><span>What kind of workout?</span><input class="in" name="workoutType" value="${esc(ex.workoutType||'')}" placeholder="Weight training, run, HIIT…"></label>
       <label class="f"><span>Notes (coach sees these)</span><textarea class="in" name="notes" placeholder="How did it go?">${esc(ex.notes||'')}</textarea></label>
@@ -441,7 +441,7 @@ function mine(){
     <div class="tile"><div class="v">${lifetime}</div><div class="l">All-time points</div><div class="s">${all.length} days logged</div></div>
   </div>
   <div class="card" style="margin-top:16px"><h2>Badges</h2><div class="badges">${badges.map(([l,e])=>`<span class="badge ${e?'earned':''}">${l}</span>`).join('')}</div></div>
-  <div class="card"><h2>Recent days</h2><div class="hist">${hist.length?hist.map(k=>{const p=dailyPoints(k);return `<div class="h"><div><b>${fmt(k.date)}</b><small> · ${k.steps.toLocaleString()} steps · ${sleepFmt(k.sleep)} sleep${k.workout?' · Peak workout':''}${k.otherWorkout?' · '+esc(k.workoutType||'other workout'):''}</small></div><b>+${p.total}</b></div>`}).join(''):'<p class="hint">Nothing logged yet. Your first check-in starts the streak.</p>'}</div></div>`;
+  <div class="card"><h2>Recent days</h2><div class="hist">${hist.length?hist.map(k=>{const p=dailyPoints(k);return `<div class="h"><div><b>${fmt(k.date)}</b><small> · ${k.steps.toLocaleString()} steps · ${sleepFmt(k.sleep)} sleep${k.workout?' · Peak Workout':''}${k.otherWorkout?' · '+esc(k.workoutType||'other workout'):''}</small></div><b>+${p.total}</b></div>`}).join(''):'<p class="hint">Nothing logged yet. Your first check-in starts the streak.</p>'}</div></div>`;
 }
 function coach(){
   if(!isCoach()) return pinScreen('Coach','Enter the coach PIN to manage clients, points, and challenges.',false);
