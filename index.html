@@ -204,7 +204,7 @@ textarea.in{min-height:70px;resize:vertical}
 const KEY='peakfit.v1';
 const DEFAULTS={
   coachPin:'1234',
-  points:{checkin:5,workout:20,steps1:5,steps2:10,steps3:15,sleep:5,water:5,protein:5,mobility:5,streak:25,encourage:5},
+  points:{checkin:5,workout:20,otherWorkout:10,steps1:5,steps2:10,steps3:15,sleep:5,water:5,protein:5,mobility:5,streak:25,encourage:5},
   thresholds:{steps1:7500,steps2:10000,steps3:12500,sleep:7,water:8},
   clients:[
     {id:'c1',name:'Kayla',pin:'1111'},{id:'c2',name:'Aaron',pin:'2222'},{id:'c3',name:'Pat',pin:'3333'},
@@ -225,6 +225,7 @@ const DEFAULTS={
 let S=null;
 function load(){
   try{const raw=localStorage.getItem(KEY); if(raw){S=JSON.parse(raw);}}catch(e){S=null}
+  if(S&&S.points&&S.points.otherWorkout==null){S.points.otherWorkout=10;S.checkins.forEach(c=>{if(c.otherWorkout==null)c.otherWorkout=false});save()}
   if(!S){S=JSON.parse(JSON.stringify(DEFAULTS)); S.challengeStart=iso(weekStart(new Date())); seed(); save();}
 }
 function save(){ try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){} }
@@ -253,10 +254,10 @@ function seed(){
     S.clients.forEach(c=>{
       const p=profiles[c.id];
       if(rnd()>p*1.1) return; // missed day
-      const workout=rnd()<p;
+      const didW=rnd()<p,workout=didW&&rnd()<.6,otherWorkout=didW&&!workout;
       S.checkins.push({id:d+c.id,clientId:c.id,date:d,
         steps:Math.round((4000+rnd()*10000*p)/100)*100,
-        workout, workoutType:workout?types[Math.floor(rnd()*types.length)]:'',
+        workout, otherWorkout, workoutType:otherWorkout?types[Math.floor(rnd()*types.length)]:'',
         sleep:Math.round((5.5+rnd()*3)*2)/2, water:Math.round(4+rnd()*6),
         protein:rnd()<p, mobility:rnd()<p*.7, encouraged:rnd()<p*.6,
         mood:Math.ceil(rnd()*5), notes:''});
@@ -269,7 +270,7 @@ function dailyPoints(ci){
   const P=S.points,T=S.thresholds;
   const base=P.checkin;
   const steps=ci.steps>=T.steps3?P.steps3:ci.steps>=T.steps2?P.steps2:ci.steps>=T.steps1?P.steps1:0;
-  const habits=(ci.workout?P.workout:0)+(ci.sleep>=T.sleep?P.sleep:0)+(ci.water>=T.water?P.water:0)
+  const habits=(ci.workout?P.workout:0)+(ci.otherWorkout?P.otherWorkout:0)+(ci.sleep>=T.sleep?P.sleep:0)+(ci.water>=T.water?P.water:0)
     +(ci.protein?P.protein:0)+(ci.mobility?P.mobility:0)+(ci.encouraged?P.encourage:0);
   return {base,steps,habits,total:base+steps+habits};
 }
@@ -285,7 +286,7 @@ function weekStats(clientId,wk){
   const rows=S.checkins.filter(c=>c.clientId===clientId&&days.includes(c.date));
   const T=S.thresholds;
   const s={checkins:rows.length,points:0,steps:0,workouts:0,sleepSum:0,sleepDays:0,waterDays:0,encourage:0,proteinDays:0,mobilityDays:0,streakBonus:0,challenge:0};
-  rows.forEach(r=>{const p=dailyPoints(r);s.points+=p.total;s.steps+=r.steps;if(r.workout)s.workouts++;s.sleepSum+=r.sleep;if(r.sleep>=T.sleep)s.sleepDays++;if(r.water>=T.water)s.waterDays++;if(r.encouraged)s.encourage++;if(r.protein)s.proteinDays++;if(r.mobility)s.mobilityDays++;});
+  rows.forEach(r=>{const p=dailyPoints(r);s.points+=p.total;s.steps+=r.steps;if(r.workout||r.otherWorkout)s.workouts++;s.sleepSum+=r.sleep;if(r.sleep>=T.sleep)s.sleepDays++;if(r.water>=T.water)s.waterDays++;if(r.encouraged)s.encourage++;if(r.protein)s.proteinDays++;if(r.mobility)s.mobilityDays++;});
   if(s.checkins>=7){s.streakBonus=S.points.streak;s.points+=s.streakBonus}
   const ch=challengeFor(wk); if(ch&&S.awards[wk]===clientId){s.challenge=ch.bonus;s.points+=s.challenge}
   s.avgSteps=rows.length?Math.round(s.steps/rows.length):0;
@@ -390,12 +391,13 @@ function checkin(){
         <label class="f"><span>Mood today</span><select class="in" name="mood">${[1,2,3,4,5].map(n=>`<option value="${n}" ${(ex.mood||3)==n?'selected':''}>${['😩 Rough','😕 Meh','😐 Okay','🙂 Good','🔥 Great'][n-1]}</option>`).join('')}</select></label>
       </div>
       <div class="grid2">
-        ${tog('workout','Worked out',`+${P.workout} pts`,ex.workout)}
+        ${tog('workout','Peak workout completed',`+${P.workout} pts`,ex.workout)}
+        ${tog('otherWorkout','Other workout completed',`cardio, yoga, other gym session… +${P.otherWorkout} pts`,ex.otherWorkout)}
         ${tog('protein','Hit protein goal',`+${P.protein} pts`,ex.protein)}
         ${tog('mobility','Mobility / stretching',`+${P.mobility} pts`,ex.mobility)}
         ${tog('encouraged','Encouraged a teammate',`+${P.encourage} pts`,ex.encouraged)}
       </div>
-      <label class="f" id="wtWrap" style="${ex.workout?'':'display:none'}"><span>What kind of workout?</span><input class="in" name="workoutType" value="${esc(ex.workoutType||'')}" placeholder="Weight training, run, HIIT…"></label>
+      <label class="f" id="wtWrap" style="${ex.otherWorkout?'':'display:none'}"><span>What kind of workout?</span><input class="in" name="workoutType" value="${esc(ex.workoutType||'')}" placeholder="Weight training, run, HIIT…"></label>
       <label class="f"><span>Notes (coach sees these)</span><textarea class="in" name="notes" placeholder="How did it go?">${esc(ex.notes||'')}</textarea></label>
       <div class="live" id="live"></div>
       <div class="row"><button class="btn sum" type="submit">${ex.id?'Save changes':'Log my day'}</button>${ex.id?'<button class="btn ghost" type="button" id="del">Remove today</button>':''}</div>
@@ -404,7 +406,7 @@ function checkin(){
 }
 function readForm(){
   const f=document.getElementById('ci'),fd=new FormData(f),t=k=>f.querySelector(`[data-t="${k}"]`).classList.contains('on');
-  return {steps:+fd.get('steps')||0,sleep:+(Math.max(0,+fd.get('sleepH')||0)+Math.min(59,Math.max(0,+fd.get('sleepM')||0))/60).toFixed(4),water:+fd.get('water')||0,mood:+fd.get('mood')||3,workout:t('workout'),protein:t('protein'),mobility:t('mobility'),encouraged:t('encouraged'),workoutType:fd.get('workoutType')||'',notes:fd.get('notes')||''};
+  return {steps:+fd.get('steps')||0,sleep:+(Math.max(0,+fd.get('sleepH')||0)+Math.min(59,Math.max(0,+fd.get('sleepM')||0))/60).toFixed(4),water:+fd.get('water')||0,mood:+fd.get('mood')||3,workout:t('workout'),otherWorkout:t('otherWorkout'),protein:t('protein'),mobility:t('mobility'),encouraged:t('encouraged'),workoutType:fd.get('workoutType')||'',notes:fd.get('notes')||''};
 }
 function updLive(){
   const l=document.getElementById('live');if(!l)return;
@@ -437,7 +439,7 @@ function mine(){
     <div class="tile"><div class="v">${lifetime}</div><div class="l">All-time points</div><div class="s">${all.length} days logged</div></div>
   </div>
   <div class="card" style="margin-top:16px"><h2>Badges</h2><div class="badges">${badges.map(([l,e])=>`<span class="badge ${e?'earned':''}">${l}</span>`).join('')}</div></div>
-  <div class="card"><h2>Recent days</h2><div class="hist">${hist.length?hist.map(k=>{const p=dailyPoints(k);return `<div class="h"><div><b>${fmt(k.date)}</b><small> · ${k.steps.toLocaleString()} steps · ${sleepFmt(k.sleep)} sleep${k.workout?' · '+esc(k.workoutType||'workout'):''}</small></div><b>+${p.total}</b></div>`}).join(''):'<p class="hint">Nothing logged yet. Your first check-in starts the streak.</p>'}</div></div>`;
+  <div class="card"><h2>Recent days</h2><div class="hist">${hist.length?hist.map(k=>{const p=dailyPoints(k);return `<div class="h"><div><b>${fmt(k.date)}</b><small> · ${k.steps.toLocaleString()} steps · ${sleepFmt(k.sleep)} sleep${k.workout?' · Peak workout':''}${k.otherWorkout?' · '+esc(k.workoutType||'other workout'):''}</small></div><b>+${p.total}</b></div>`}).join(''):'<p class="hint">Nothing logged yet. Your first check-in starts the streak.</p>'}</div></div>`;
 }
 function coach(){
   if(!isCoach()) return pinScreen('Coach','Enter the coach PIN to manage clients, points, and challenges.',false);
@@ -463,7 +465,8 @@ function coach(){
   <div class="card"><h2>Point values</h2><p class="hint">Change these to tune the game. The whole board recalculates instantly.</p>
     <form id="pts" class="ptgrid" style="margin-top:12px">
       <span>Daily check-in</span><input class="in" name="checkin" type="number" value="${P.checkin}">
-      <span>Workout completed</span><input class="in" name="workout" type="number" value="${P.workout}">
+      <span>Peak Workout Completed</span><input class="in" name="workout" type="number" value="${P.workout}">
+      <span>Other Workout Completed <small style="color:var(--ink-3)">(cardio, yoga, other gym session, etc.)</small></span><input class="in" name="otherWorkout" type="number" value="${P.otherWorkout}">
       <span>${T.steps1.toLocaleString()}+ steps</span><input class="in" name="steps1" type="number" value="${P.steps1}">
       <span>${T.steps2.toLocaleString()}+ steps</span><input class="in" name="steps2" type="number" value="${P.steps2}">
       <span>${T.steps3.toLocaleString()}+ steps</span><input class="in" name="steps3" type="number" value="${P.steps3}">
@@ -507,7 +510,7 @@ function bind(){
 
   const ci=app.querySelector('#ci');
   if(ci){
-    ci.querySelectorAll('.toggle').forEach(t=>{const flip=()=>{t.classList.toggle('on');t.setAttribute('aria-checked',t.classList.contains('on'));if(t.dataset.t==='workout')app.querySelector('#wtWrap').style.display=t.classList.contains('on')?'':'none';updLive()};t.addEventListener('click',flip);t.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();flip()}})});
+    ci.querySelectorAll('.toggle').forEach(t=>{const flip=()=>{t.classList.toggle('on');t.setAttribute('aria-checked',t.classList.contains('on'));if(t.dataset.t==='otherWorkout')app.querySelector('#wtWrap').style.display=t.classList.contains('on')?'':'none';updLive()};t.addEventListener('click',flip);t.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();flip()}})});
     ci.addEventListener('input',updLive); updLive();
     ci.addEventListener('submit',e=>{e.preventDefault();const c=me(),d=today(),v=readForm();
       const i=S.checkins.findIndex(x=>x.clientId===c.id&&x.date===d);
