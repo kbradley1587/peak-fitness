@@ -236,6 +236,7 @@ function iso(d){const x=new Date(d);x.setHours(12,0,0,0);return x.toISOString().
 function fromIso(s){const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d,12)}
 function weekStart(d){const x=new Date(d);x.setHours(12,0,0,0);const dow=(x.getDay()+6)%7;x.setDate(x.getDate()-dow);return x}
 function today(){return iso(new Date())}
+function hm(h){if(!h)return '0h';const H=Math.floor(h),M=Math.round((h-H)*60);return M?`${H}h ${M}m`:`${H}h`}
 function fmt(d){return fromIso(d).toLocaleDateString(undefined,{month:'short',day:'numeric'})}
 function weekDays(ws){return Array.from({length:7},(_,i)=>iso(new Date(fromIso(ws).getTime()+i*DAY)))}
 function currentWeekKey(){return iso(weekStart(new Date()))}
@@ -384,7 +385,7 @@ function checkin(){
     <form id="ci" style="margin-top:18px;display:grid;gap:14px">
       <div class="grid2">
         <label class="f"><span>Steps</span><input class="in" type="number" inputmode="numeric" name="steps" min="0" step="100" value="${ex.steps??''}" placeholder="e.g. 8,200"></label>
-        <label class="f"><span>Sleep</span><div class="row" style="flex-wrap:nowrap"><input class="in" type="number" inputmode="numeric" name="sleepH" min="0" max="16" value="${ex.sleep!=null?Math.floor(ex.sleep):''}" placeholder="hrs" aria-label="Sleep hours"><select class="in" name="sleepM" aria-label="Sleep minutes">${Array.from({length:12},(_,i)=>i*5).map(m=>`<option value="${m}" ${ex.sleep!=null&&Math.round((ex.sleep%1)*60/5)*5===m?'selected':''}>${String(m).padStart(2,'0')} min</option>`).join('')}</select></div></label>
+        <label class="f"><span>Sleep</span><div class="row" style="flex-wrap:nowrap"><input class="in" type="number" inputmode="numeric" name="sleepH" min="0" max="16" value="${ex.sleep!=null?Math.floor(ex.sleep):''}" placeholder="hrs" aria-label="Sleep hours"><input class="in" type="number" inputmode="numeric" name="sleepM" min="0" max="59" value="${ex.sleep!=null?Math.round((ex.sleep%1)*60):''}" placeholder="min" aria-label="Sleep minutes"></div></label>
         <label class="f"><span>Water (cups)</span><input class="in" type="number" inputmode="numeric" name="water" min="0" max="30" value="${ex.water??''}" placeholder="8 hits the goal"></label>
         <label class="f"><span>Mood today</span><select class="in" name="mood">${[1,2,3,4,5].map(n=>`<option value="${n}" ${(ex.mood||3)==n?'selected':''}>${['😩 Rough','😕 Meh','😐 Okay','🙂 Good','🔥 Great'][n-1]}</option>`).join('')}</select></label>
       </div>
