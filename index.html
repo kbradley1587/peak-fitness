@@ -140,6 +140,15 @@ textarea.in{min-height:70px;resize:vertical}
 .dots{display:flex;gap:12px;justify-content:center;margin-top:16px}
 .dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--ink-3)}
 .dots i.f{background:var(--ink);border-color:var(--ink)}
+.whoami{display:flex;justify-content:space-between;align-items:center;margin-top:16px;border:1px solid var(--line);background:var(--field);border-radius:12px;padding:12px 16px}
+.whoami b{font-family:var(--display);font-size:24px;font-weight:700}
+.whoami a{font-size:14px;color:var(--ink-2)}
+.find{position:relative;margin-top:16px}
+.matches{position:absolute;left:0;right:0;top:100%;z-index:3;background:var(--paper);border:1px solid var(--line);border-radius:12px;margin-top:6px;overflow:hidden;box-shadow:0 10px 30px rgba(16,40,58,.15)}
+.matches:empty{display:none}
+.matches button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:12px 16px;font-weight:600;cursor:pointer}
+.matches button:hover,.matches button:focus{background:var(--field)}
+.matches .none{padding:12px 16px;color:var(--ink-3)}
 .who{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:14px}
 .who button{border:1px solid var(--line);background:var(--field);border-radius:999px;padding:8px 14px;font-weight:600;cursor:pointer}
 .who button.on{background:var(--ink);color:var(--snow);border-color:var(--ink)}
@@ -346,12 +355,16 @@ function home(){
 }
 
 let pinBuf='',pinWho=null;
+function rememberedWho(){try{const id=localStorage.getItem('peakfit.who');return S.clients.find(c=>c.id===id)||null}catch(e){return null}}
 function pinScreen(title,hint,who){
+  if(who&&!pinWho){const r=rememberedWho();if(r)pinWho=r.id}
+  const sel=who?S.clients.find(c=>c.id===pinWho):null;
   return `<div class="card" style="max-width:460px;margin:20px auto">
-    <h2>${title}</h2><p class="hint">${hint}</p>
-    ${who?`<div class="who" id="who">${S.clients.map(c=>`<button data-who="${c.id}" class="${pinWho===c.id?'on':''}">${esc(c.name)}</button>`).join('')}</div>`:''}
+    <h2>${title}</h2><p class="hint">${sel?`Enter your 4-digit PIN.`:hint}</p>
+    ${who?(sel?`<div class="whoami"><b>${esc(sel.name)}</b><a href="#" id="notme">Not you?</a></div>`
+      :`<div class="find"><input class="in" id="findName" type="search" autocomplete="off" placeholder="Type your name…" aria-label="Your name"><div class="matches" id="matches"></div></div>`):''}
     <div class="dots" id="dots">${[0,1,2,3].map(i=>`<i class="${i<pinBuf.length?'f':''}"></i>`).join('')}</div>
-    <div class="pinpad" id="pad">${[1,2,3,4,5,6,7,8,9].map(n=>`<button data-k="${n}">${n}</button>`).join('')}<button data-k="x" aria-label="Clear">⌫</button><button data-k="0">0</button><button data-k="go" aria-label="Enter">↵</button></div>
+    <div class="pinpad" id="pad" style="${who&&!sel?'opacity:.35;pointer-events:none':''}">${[1,2,3,4,5,6,7,8,9].map(n=>`<button data-k="${n}">${n}</button>`).join('')}<button data-k="x" aria-label="Clear">⌫</button><button data-k="0">0</button><button data-k="go" aria-label="Enter">↵</button></div>
     <div class="err" id="pinerr"></div>
   </div>`;
 }
@@ -477,15 +490,21 @@ function bind(){
   const so=app.querySelector('#signout'); if(so) so.addEventListener('click',e=>{e.preventDefault();const se=sess();if(se&&se.token)rpc('logout',{p_token:se.token}).catch(()=>{});setSess(null);pinBuf='';pinWho=null;route()});
   const pad=app.querySelector('#pad');
   if(pad){
-    const isCoachScreen=!app.querySelector('#who');
-    app.querySelectorAll('#who button').forEach(b=>b.addEventListener('click',()=>{pinWho=b.dataset.who;app.querySelectorAll('#who button').forEach(x=>x.classList.toggle('on',x===b))}));
+    const isCoachScreen=!(app.querySelector('#findName')||app.querySelector('#notme'));
+    const nm=app.querySelector('#notme'); if(nm) nm.addEventListener('click',e=>{e.preventDefault();pinWho=null;pinBuf='';try{localStorage.removeItem('peakfit.who')}catch(_){}route()});
+    const fi=app.querySelector('#findName');
+    if(fi){const box=app.querySelector('#matches');fi.focus();
+      fi.addEventListener('input',()=>{const q=fi.value.trim().toLowerCase();if(!q){box.innerHTML='';return}
+        const m=S.clients.filter(c=>c.name.toLowerCase().includes(q)).slice(0,6);
+        box.innerHTML=m.length?m.map(c=>`<button type="button" data-pick="${c.id}">${esc(c.name)}</button>`).join(''):'<div class="none">No one by that name. Ask your coach to add you.</div>';
+        box.querySelectorAll('[data-pick]').forEach(b=>b.addEventListener('click',()=>{pinWho=b.dataset.pick;pinBuf='';route()}));});}
     const drawDots=()=>{app.querySelectorAll('#dots i').forEach((d,i)=>d.classList.toggle('f',i<pinBuf.length))};
     const tryPin=async()=>{
       const err=app.querySelector('#pinerr');
       try{
         if(isCoachScreen){const t=await rpc('coach_login',{p_pin:pinBuf});setSess({coach:true,token:t});}
-        else{ if(!pinWho){err.textContent='Tap your name first.';pinBuf='';drawDots();return}
-          const t=await rpc('client_login',{p_client:pinWho,p_pin:pinBuf});setSess({clientId:pinWho,token:t});}
+        else{ if(!pinWho){err.textContent='Find your name first.';pinBuf='';drawDots();return}
+          const t=await rpc('client_login',{p_client:pinWho,p_pin:pinBuf});setSess({clientId:pinWho,token:t});try{localStorage.setItem('peakfit.who',pinWho)}catch(_){}}
         pinBuf='';route();
       }catch(e){err.textContent=e.message;pinBuf='';drawDots()}
     };
