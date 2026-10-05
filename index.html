@@ -200,74 +200,39 @@ textarea.in{min-height:70px;resize:vertical}
 <nav class="mobilenav" id="mnav"></nav>
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js"></script>
 <script>
-/* ---------- data layer (swap this object for Supabase later) ---------- */
-const KEY='peakfit.v1';
-const DEFAULTS={
-  coachPin:'1234',
-  backfillDays:3,
-  points:{checkin:5,workout:20,otherWorkout:10,sunlight:5,steps1:5,steps2:10,steps3:15,sleep:5,water:5,protein:5,mobility:5,streak:25,encourage:5},
-  thresholds:{steps1:7500,steps2:10000,steps3:12500,sleep:7,water:8},
-  clients:[
-    {id:'c1',name:'Kayla',pin:'1111'},{id:'c2',name:'Aaron',pin:'2222'},{id:'c3',name:'Pat',pin:'3333'},
-    {id:'c4',name:'Kevin',pin:'4444'},{id:'c5',name:'Amanda',pin:'5555'},{id:'c6',name:'Marky D',pin:'6666'}
-  ],
-  challenges:[
-    {week:1,name:'70K Step Battle',how:'Most total steps for the week',bonus:50,metric:'steps'},
-    {week:2,name:'Workout Warrior',how:'Most completed workouts',bonus:50,metric:'workouts'},
-    {week:3,name:'Sleep Strong',how:'Most nights at 7+ hours',bonus:50,metric:'sleepDays'},
-    {week:4,name:'Consistency Crown',how:'Most complete check-in days',bonus:50,metric:'checkins'},
-    {week:5,name:'Accountability MVP',how:'Most encouragement check-ins',bonus:50,metric:'encourage'},
-    {week:6,name:'Hydration Hero',how:'Most days hitting the water goal',bonus:50,metric:'waterDays'}
-  ],
-  challengeStart:null, // ISO date of week 1 Monday; set on first load
-  awards:{}, // {weekKey: clientId}
-  checkins:[]
-};
+/* ---------- data layer (Supabase) ---------- */
+const SUPABASE_URL='https://thqmmovgsfotcfkdlubg.supabase.co';
+const SUPABASE_KEY='sb_publishable_wfbCeYikfnrYcCtquSzeZg_ibdpxjz9';
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false}});
 let S=null;
-function load(){
-  try{const raw=localStorage.getItem(KEY); if(raw){S=JSON.parse(raw);}}catch(e){S=null}
-  if(S&&S.points&&S.points.otherWorkout==null){S.points.otherWorkout=10;S.checkins.forEach(c=>{if(c.otherWorkout==null)c.otherWorkout=false});save()}
-  if(S&&S.backfillDays==null){S.backfillDays=3;save()}
-  if(S&&S.points&&S.points.sunlight==null){S.points.sunlight=5;S.checkins.forEach(c=>{if(c.sunlight==null)c.sunlight=false});save()}
-  if(!S){S=JSON.parse(JSON.stringify(DEFAULTS)); S.challengeStart=iso(weekStart(new Date())); seed(); save();}
+async function rpc(fn,args){const {data,error}=await sb.rpc(fn,args||{});if(error){const m=(error.message||'').replace(/^.*?: /,'');throw new Error(m||'Something went wrong')}return data}
+async function load(){
+  const b=await rpc('public_board');
+  S={clients:b.clients,checkins:b.checkins,awards:b.awards||{},today:b.settings.today,
+     points:b.settings.points,thresholds:b.settings.thresholds,backfillDays:b.settings.backfillDays,
+     challengeStart:b.settings.challengeStart,challenges:b.settings.challenges,coachPin:null,notes:[]};
+  const se=sess();
+  try{
+    if(se&&se.clientId&&se.token){const m=await rpc('my_data',{p_token:se.token});
+      S.checkins=S.checkins.filter(c=>c.clientId!==m.clientId).concat(m.checkins);}
+    if(se&&se.coach&&se.token){const c=await rpc('coach_data',{p_token:se.token});
+      S.clients=c.clients;S.coachPin=c.coachPin;S.notes=c.notes;}
+  }catch(e){setSess(null)} // expired/invalid token: drop it quietly
 }
-function save(){ try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){} }
-function reset(){ try{localStorage.removeItem(KEY)}catch(e){} S=null; load(); }
 
 /* ---------- dates ---------- */
 const DAY=86400000;
 function iso(d){const x=new Date(d);x.setHours(12,0,0,0);return x.toISOString().slice(0,10)}
 function fromIso(s){const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d,12)}
 function weekStart(d){const x=new Date(d);x.setHours(12,0,0,0);const dow=(x.getDay()+6)%7;x.setDate(x.getDate()-dow);return x}
-function today(){return iso(new Date())}
+function today(){return S&&S.today?S.today:iso(new Date())}
 function hm(h){if(!h)return '0h';const H=Math.floor(h),M=Math.round((h-H)*60);return M?`${H}h ${M}m`:`${H}h`}
 function fmt(d){return fromIso(d).toLocaleDateString(undefined,{month:'short',day:'numeric'})}
 function weekDays(ws){return Array.from({length:7},(_,i)=>iso(new Date(fromIso(ws).getTime()+i*DAY)))}
 function currentWeekKey(){return iso(weekStart(new Date()))}
 function weekNumber(){const ws=weekStart(new Date()),cs=fromIso(S.challengeStart);return Math.max(1,Math.round((ws-cs)/(7*DAY))+1)}
-
-/* ---------- seed demo data (deterministic) ---------- */
-function seed(){
-  let r=7;const rnd=()=>{r=(r*16807)%2147483647;return r/2147483647};
-  const profiles={c1:.7,c2:.5,c3:.35,c4:.6,c5:.9,c6:.8};
-  const types=['Weight training','Run','Cycling','HIIT','Yoga','Swim'];
-  const t=new Date();
-  for(let back=9;back>=0;back--){
-    const d=iso(new Date(t.getTime()-back*DAY));
-    S.clients.forEach(c=>{
-      const p=profiles[c.id];
-      if(rnd()>p*1.1) return; // missed day
-      const didW=rnd()<p,workout=didW&&rnd()<.6,otherWorkout=didW&&!workout;
-      S.checkins.push({id:d+c.id,clientId:c.id,date:d,
-        steps:Math.round((4000+rnd()*10000*p)/100)*100,
-        workout, otherWorkout, workoutType:otherWorkout?types[Math.floor(rnd()*types.length)]:'',
-        sleep:Math.round((5.5+rnd()*3)*2)/2, water:Math.round(4+rnd()*6),
-        protein:rnd()<p, mobility:rnd()<p*.7, sunlight:rnd()<p*.8, encouraged:rnd()<p*.6,
-        mood:Math.ceil(rnd()*5), notes:''});
-    });
-  }
-}
 
 /* ---------- scoring engine ---------- */
 function dailyPoints(ci){
@@ -321,7 +286,15 @@ function icoBoard(){return '<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhE
 function icoCheck(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 12l3 3 5-6"/></svg>'}
 function icoMe(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>'}
 function icoCoach(){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="5"/></svg>'}
-function route(){const h=location.hash.replace(/^#\/?/,'').split('?')[0];const fn=ROUTES[h]||home;renderNav(h);document.getElementById('app').innerHTML=fn();bind();window.scrollTo(0,0)}
+let poll=null;
+async function route(){
+  const h=location.hash.replace(/^#\/?/,'').split('?')[0];const fn=ROUTES[h]||home;renderNav(h);
+  const app=document.getElementById('app');
+  if(!S) app.innerHTML='<div class="card" style="text-align:center;color:var(--ink-2)">Loading…</div>';
+  try{await load()}catch(e){app.innerHTML=`<div class="card"><h2>Can\u2019t reach the server</h2><p class="hint">${esc(e.message)}. Check your connection and refresh.</p></div>`;return}
+  app.innerHTML=fn();bind();window.scrollTo(0,0);
+  clearInterval(poll); if(h===''){poll=setInterval(async()=>{try{await load();if(!location.hash.replace(/^#\/?/,'')){document.getElementById('app').innerHTML=home();bind()}}catch(e){}},20000)}
+}
 function renderNav(h){
   document.getElementById('tabs').innerHTML=NAV.map(([k,l])=>`<a href="#/${k}" class="${k===h?'on':''}">${l}</a>`).join('');
   document.getElementById('mnav').innerHTML=NAV.map(([k,l,i])=>`<a href="#/${k}" class="${k===h?'on':''}">${i()}${l}</a>`).join('');
@@ -455,10 +428,9 @@ function coach(){
   if(!isCoach()) return pinScreen('Coach','Enter the coach PIN to manage clients, points, and challenges.',false);
   const wk=currentWeekKey(),rows=leaderboard(wk),ch=challengeFor(wk),lead=challengeLeader(wk);
   const P=S.points,T=S.thresholds;
-  const notes=S.checkins.filter(k=>k.notes&&weekDays(wk).includes(k.date)).sort((a,b)=>b.date.localeCompare(a.date));
+  const notes=(S.notes||[]).filter(k=>weekDays(wk).includes(k.date));
   return `<div class="card">
     <div class="mehead"><div><h2>Coach Dashboard</h2><p class="hint">Week ${weekNumber()} · ${rows.filter(r=>r.checkins>0).length} active · <a href="#/coach" id="signout">sign out</a></p></div></div>
-    <div class="note" style="margin-top:14px">Front-end preview: everything here is stored in this browser only. Once connected to Supabase, PINs, check-ins, and standings sync across every client's phone and the gym display.</div>
   </div>
   <div class="card"><h2>This Week's Challenge</h2>
     ${ch?`<p class="hint"><b>${esc(ch.name)}</b> — ${esc(ch.how)} (+${ch.bonus} pts)</p>
@@ -494,26 +466,29 @@ function coach(){
   </div>
   <div class="card"><h2>Challenge Rotation</h2><div class="chal" style="margin-top:12px">${S.challenges.map((c,i)=>`<div class="c ${ch===c?'now':''}"><div><b>${esc(c.name)}</b><br><small>${esc(c.how)}</small></div><div>+${c.bonus}</div></div>`).join('')}</div></div>
   <div class="card"><h2>Client Notes This Week</h2><div class="hist" style="margin-top:12px">${notes.length?notes.map(k=>`<div class="h"><div><b style="font-size:16px">${esc(S.clients.find(c=>c.id===k.clientId)?.name||'')}</b><small> · ${fmt(k.date)}</small><div>${esc(k.notes)}</div></div></div>`).join(''):'<p class="hint">No notes yet.</p>'}</div></div>
-  <div class="card"><h2>Danger Zone</h2><div class="row" style="margin-top:12px"><button class="btn danger sm" id="wipe">Reset demo data</button><span class="hint">Restores the sample roster and check-ins.</span></div></div>`;
+`;
 }
 
 /* ---------- bindings ---------- */
+async function act(fn){try{await fn();await route()}catch(e){toast(e.message)}}
 function bind(){
   const app=document.getElementById('app');
   const lt=app.querySelector('#logToday'); if(lt) lt.addEventListener('click',()=>setCiDate(null));
-  const so=app.querySelector('#signout'); if(so) so.addEventListener('click',e=>{e.preventDefault();setSess(null);pinBuf='';pinWho=null;route()});
+  const so=app.querySelector('#signout'); if(so) so.addEventListener('click',e=>{e.preventDefault();const se=sess();if(se&&se.token)rpc('logout',{p_token:se.token}).catch(()=>{});setSess(null);pinBuf='';pinWho=null;route()});
   const pad=app.querySelector('#pad');
   if(pad){
     const isCoachScreen=!app.querySelector('#who');
     app.querySelectorAll('#who button').forEach(b=>b.addEventListener('click',()=>{pinWho=b.dataset.who;app.querySelectorAll('#who button').forEach(x=>x.classList.toggle('on',x===b))}));
-    const tryPin=()=>{
-      const err=app.querySelector('#pinerr');
-      if(isCoachScreen){ if(pinBuf===S.coachPin){setSess({coach:true});pinBuf='';route();return} }
-      else{ if(!pinWho){err.textContent='Tap your name first.';pinBuf='';drawDots();return}
-        const c=S.clients.find(x=>x.id===pinWho); if(c&&c.pin===pinBuf){setSess({clientId:c.id});pinBuf='';route();return} }
-      err.textContent='That PIN didn\u2019t match. Try again.';pinBuf='';drawDots();
-    };
     const drawDots=()=>{app.querySelectorAll('#dots i').forEach((d,i)=>d.classList.toggle('f',i<pinBuf.length))};
+    const tryPin=async()=>{
+      const err=app.querySelector('#pinerr');
+      try{
+        if(isCoachScreen){const t=await rpc('coach_login',{p_pin:pinBuf});setSess({coach:true,token:t});}
+        else{ if(!pinWho){err.textContent='Tap your name first.';pinBuf='';drawDots();return}
+          const t=await rpc('client_login',{p_client:pinWho,p_pin:pinBuf});setSess({clientId:pinWho,token:t});}
+        pinBuf='';route();
+      }catch(e){err.textContent=e.message;pinBuf='';drawDots()}
+    };
     pad.addEventListener('click',e=>{const k=e.target.closest('button')?.dataset.k;if(!k)return;
       if(k==='x'){pinBuf=pinBuf.slice(0,-1)}else if(k==='go'){if(pinBuf.length===4)tryPin();return}else if(pinBuf.length<4){pinBuf+=k}
       drawDots(); if(pinBuf.length===4) setTimeout(tryPin,120);
@@ -525,24 +500,21 @@ function bind(){
   if(ci){
     ci.querySelectorAll('.toggle').forEach(t=>{const flip=()=>{t.classList.toggle('on');t.setAttribute('aria-checked',t.classList.contains('on'));if(t.dataset.t==='otherWorkout')app.querySelector('#wtWrap').style.display=t.classList.contains('on')?'':'none';updLive()};t.addEventListener('click',flip);t.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();flip()}})});
     ci.addEventListener('input',updLive); updLive();
-    ci.addEventListener('submit',e=>{e.preventDefault();const c=me(),d=ciDate(),v=readForm();
-      const i=S.checkins.findIndex(x=>x.clientId===c.id&&x.date===d);
-      const rec={id:d+c.id,clientId:c.id,date:d,...v};
-      if(i>=0)S.checkins[i]=rec;else S.checkins.push(rec);
-      save();const p=dailyPoints(rec);toast(`Logged ${fmt(d)} · +${p.total} points`);setCiDate(null);location.hash='#/me'});
-    const del=app.querySelector('#del'); if(del) del.addEventListener('click',()=>{const c=me(),d=ciDate();S.checkins=S.checkins.filter(x=>!(x.clientId===c.id&&x.date===d));save();toast('Removed that check-in');route()});
+    ci.addEventListener('submit',e=>{e.preventDefault();const d=ciDate(),v=readForm(),btn=ci.querySelector('button[type=submit]');btn.disabled=true;
+      act(async()=>{const rec=await rpc('upsert_checkin',{p_token:sess().token,p_date:d,p:v});const p=dailyPoints(rec);toast(`Logged ${fmt(d)} · +${p.total} points`);setCiDate(null);location.hash='#/me'}).finally(()=>{btn.disabled=false})});
+    const del=app.querySelector('#del'); if(del) del.addEventListener('click',()=>act(async()=>{await rpc('delete_checkin',{p_token:sess().token,p_date:ciDate()});toast('Removed that check-in')}));
     const dsel=app.querySelector('#ciDate'); if(dsel) dsel.addEventListener('change',()=>{setCiDate(dsel.value);route()});
   }
 
-  const aw=app.querySelector('#awardBtn'); if(aw) aw.addEventListener('click',()=>{const v=app.querySelector('#award').value,wk=currentWeekKey();if(v)S.awards[wk]=v;else delete S.awards[wk];save();toast(v?'Bonus awarded':'Award cleared');route()});
-  app.querySelectorAll('[data-pin]').forEach(b=>b.addEventListener('click',()=>{const c=S.clients.find(x=>x.id===b.dataset.pin);const p=prompt(`New 4-digit PIN for ${c.name}`,c.pin);if(p&&/^\d{4}$/.test(p)){c.pin=p;save();route()}else if(p!==null)toast('PIN must be 4 digits')}));
-  app.querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>{const c=S.clients.find(x=>x.id===b.dataset.rm);if(confirm(`Remove ${c.name} and all their check-ins?`)){S.clients=S.clients.filter(x=>x!==c);S.checkins=S.checkins.filter(x=>x.clientId!==c.id);save();route()}}));
-  const addc=app.querySelector('#addc'); if(addc) addc.addEventListener('submit',e=>{e.preventDefault();const n=new FormData(addc).get('name').trim();if(!n)return;const pin=String(1000+Math.floor(Math.random()*9000));S.clients.push({id:'c'+Date.now(),name:n,pin});save();toast(`${n} added · PIN ${pin}`);route()});
-  const pts=app.querySelector('#pts'); if(pts) pts.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(pts);for(const k of Object.keys(S.points))S.points[k]=+fd.get(k)||0;const cp=fd.get('coachPin');if(/^\d{4}$/.test(cp))S.coachPin=cp;S.backfillDays=Math.min(14,Math.max(0,+fd.get('backfillDays')||0));save();toast('Saved');route()});
-  const wipe=app.querySelector('#wipe'); if(wipe) wipe.addEventListener('click',()=>{if(confirm('Reset all data to the demo roster?')){reset();toast('Demo data restored');route()}});
+  const tok=()=>sess().token;
+  const aw=app.querySelector('#awardBtn'); if(aw) aw.addEventListener('click',()=>{const v=app.querySelector('#award').value;act(async()=>{await rpc('coach_award',{p_token:tok(),p_week:currentWeekKey(),p_client:v||null});toast(v?'Bonus awarded':'Award cleared')})});
+  app.querySelectorAll('[data-pin]').forEach(b=>b.addEventListener('click',()=>{const c=S.clients.find(x=>x.id===b.dataset.pin);const p=prompt(`New 4-digit PIN for ${c.name}`,c.pin);if(p===null)return;if(!/^\d{4}$/.test(p)){toast('PIN must be 4 digits');return}act(async()=>{await rpc('coach_set_pin',{p_token:tok(),p_client:c.id,p_pin:p});toast('PIN updated')})}));
+  app.querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>{const c=S.clients.find(x=>x.id===b.dataset.rm);if(confirm(`Remove ${c.name} and all their check-ins?`))act(async()=>{await rpc('coach_remove_client',{p_token:tok(),p_client:c.id});toast(`${c.name} removed`)})}));
+  const addc=app.querySelector('#addc'); if(addc) addc.addEventListener('submit',e=>{e.preventDefault();const n=new FormData(addc).get('name').trim();if(!n)return;act(async()=>{const c=await rpc('coach_add_client',{p_token:tok(),p_name:n});toast(`${c.name} added · PIN ${c.pin}`)})});
+  const pts=app.querySelector('#pts'); if(pts) pts.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(pts);const points={};for(const k of Object.keys(S.points))points[k]=+fd.get(k)||0;
+    act(async()=>{await rpc('coach_set_settings',{p_token:tok(),p:{points,backfillDays:+fd.get('backfillDays')||0,coachPin:fd.get('coachPin')}});toast('Saved')})});
 }
 
-load();
 window.addEventListener('hashchange',route);
 route();
 </script>
